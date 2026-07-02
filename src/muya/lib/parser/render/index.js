@@ -1,6 +1,6 @@
 import loadRenderer from '../../renderers'
-import { CLASS_OR_ID, PREVIEW_DOMPURIFY_CONFIG } from '../../config'
-import { conflict, mixins, camelToSnake, sanitize } from '../../utils'
+import { CLASS_OR_ID } from '../../config'
+import { conflict, mixins, camelToSnake } from '../../utils'
 import { patch, toVNode, toHTML, h } from './snabbdom'
 import { beginRules } from '../rules'
 import renderInlines from './renderInlines'
@@ -102,37 +102,43 @@ class StateRender {
         securityLevel: 'strict',
         theme: this.muya.options.mermaidTheme
       })
-      for (const [key, value] of this.mermaidCache.entries()) {
+      // Snapshot and clear cache immediately to prevent race conditions
+      // when new blocks are added to mermaidCache during async rendering.
+      const entries = Array.from(this.mermaidCache.entries())
+      this.mermaidCache.clear()
+
+      for (const [key, value] of entries) {
         const { code } = value
         const target = document.querySelector(key)
         if (!target) {
           continue
         }
         try {
-          mermaid.parse(code)
-          target.innerHTML = sanitize(code, PREVIEW_DOMPURIFY_CONFIG, true)
-          mermaid.init(undefined, target)
+          const id = `mermaid-${key.replace('#', '')}`
+          const result = await mermaid.render(id, code)
+          const svg = typeof result === 'string' ? result : result.svg
+          target.innerHTML = svg
         } catch (err) {
           target.innerHTML = '< Invalid Mermaid Codes >'
           target.classList.add(CLASS_OR_ID.AG_MATH_ERROR)
         }
       }
-
-      this.mermaidCache.clear()
     }
   }
 
   async renderDiagram () {
-    const cache = this.diagramCache
-    if (cache.size) {
+    if (this.diagramCache.size) {
       const RENDER_MAP = {
         flowchart: await loadRenderer('flowchart'),
         sequence: await loadRenderer('sequence'),
         plantuml: await loadRenderer('plantuml'),
         'vega-lite': await loadRenderer('vega-lite')
       }
+      // Snapshot and clear cache immediately to prevent race conditions
+      const entries = Array.from(this.diagramCache.entries())
+      this.diagramCache.clear()
 
-      for (const [key, value] of cache.entries()) {
+      for (const [key, value] of entries) {
         const target = document.querySelector(key)
         if (!target) {
           continue
@@ -167,7 +173,6 @@ class StateRender {
           target.classList.add(CLASS_OR_ID.AG_MATH_ERROR)
         }
       }
-      this.diagramCache.clear()
     }
   }
 
