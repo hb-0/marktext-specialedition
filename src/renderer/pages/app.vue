@@ -31,7 +31,6 @@
       <export-setting-dialog></export-setting-dialog>
       <rename></rename>
       <tweet></tweet>
-      <import-modal></import-modal>
     </div>
   </div>
 </template>
@@ -47,10 +46,9 @@ import CommandPalette from '@/components/commandPalette'
 import ExportSettingDialog from '@/components/exportSettings'
 import Rename from '@/components/rename'
 import Tweet from '@/components/tweet'
-import ImportModal from '@/components/import'
+import { MessageBox } from 'element-ui'
 import { loadingPageMixins } from '@/mixins'
 import { mapState } from 'vuex'
-import bus from '@/bus'
 import { DEFAULT_STYLE } from '@/config'
 import { ipcRenderer } from 'electron'
 
@@ -65,7 +63,6 @@ export default {
     ExportSettingDialog,
     Rename,
     Tweet,
-    ImportModal,
     CommandPalette
   },
   mixins: [loadingPageMixins],
@@ -165,30 +162,48 @@ export default {
     // module: notification
     dispatch('LISTEN_FOR_NOTIFICATION')
 
-    // prevent Chromium's default behavior and try to open the first file
+    // prevent Chromium's default behavior and open dropped files
     window.addEventListener('dragover', e => {
       // Cancel to allow tab drag&drop.
       if (!e.dataTransfer.types.length) return
 
       if (e.dataTransfer.types.indexOf('Files') >= 0) {
+        // Single image is handled by muya (insert into the document).
         if (e.dataTransfer.items.length === 1 && e.dataTransfer.items[0].type.indexOf('image') > -1) {
-          // Do nothing, because we already drag/drop image in muya.
-        } else {
-          e.preventDefault()
-          if (this.timer) {
-            clearTimeout(this.timer)
-          }
-          this.timer = setTimeout(() => {
-            bus.$emit('importDialog', false)
-          }, 300)
-          bus.$emit('importDialog', true)
+          e.dataTransfer.dropEffect = 'copy'
+          return
         }
-
+        // Other files: allow drop to open them.
+        e.preventDefault()
         e.dataTransfer.dropEffect = 'copy'
       } else {
         e.stopPropagation()
         e.dataTransfer.dropEffect = 'none'
       }
+    }, false)
+
+    // Open dropped non-image files after confirmation; images are inserted by muya.
+    window.addEventListener('drop', e => {
+      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return
+      const files = Array.from(e.dataTransfer.files)
+      const images = files.filter(f => /image/.test(f.type))
+      const filesToOpen = files.filter(f => !/image/.test(f.type))
+      if (!filesToOpen.length) return
+      e.preventDefault()
+      const paths = filesToOpen.map(f => f.path)
+      let message = paths.length === 1
+        ? `是否打开文件 "${paths[0]}"？`
+        : `是否打开选中的 ${paths.length} 个文件？`
+      if (images.length > 0) {
+        message += `（${images.length} 张图片将被忽略，如需插入图片请单独拖入）`
+      }
+      MessageBox.confirm(message, '打开文件', {
+        confirmButtonText: '打开',
+        cancelButtonText: '取消',
+        type: 'info'
+      }).then(() => {
+        ipcRenderer.send('mt::window::drop', paths)
+      }).catch(() => {})
     }, false)
 
     this.$nextTick(() => {

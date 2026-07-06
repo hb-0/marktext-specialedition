@@ -138,12 +138,18 @@ const dragDropCtrl = ContentState => {
         fileList.push(file)
       }
       const image = fileList.find(file => /image/.test(file.type))
-      if (image && dropAnchor) {
+      if (image) {
         const { name, path } = image
         const id = `loading-${getUniqueId()}`
         const text = `![${id}](${path})`
         const imageBlock = this.createBlockP(text)
-        const { anchor, position } = dropAnchor
+        let anchor, position
+        if (dropAnchor) {
+          ({ anchor, position } = dropAnchor)
+        } else {
+          anchor = this.getLastBlock()
+          position = 'down'
+        }
         if (position === 'up') {
           this.insertBefore(imageBlock, anchor)
         } else {
