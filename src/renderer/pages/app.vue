@@ -47,10 +47,19 @@ import ExportSettingDialog from '@/components/exportSettings'
 import Rename from '@/components/rename'
 import Tweet from '@/components/tweet'
 import { MessageBox } from 'element-ui'
+import { MARKDOWN_EXTENSIONS } from 'common/filesystem/paths'
 import { loadingPageMixins } from '@/mixins'
 import { mapState } from 'vuex'
 import { DEFAULT_STYLE } from '@/config'
 import { ipcRenderer } from 'electron'
+
+const PANDOC_EXTENSIONS = ['html', 'docx', 'odt', 'latex', 'tex', 'ltx', 'rst', 'rest', 'org', 'wiki', 'dokuwiki', 'textile', 'opml', 'epub']
+const isSupportedFile = filepath => {
+  if (!filepath) return false
+  const lower = filepath.toLowerCase()
+  return MARKDOWN_EXTENSIONS.some(ext => lower.endsWith('.' + ext)) ||
+    PANDOC_EXTENSIONS.some(ext => lower.endsWith('.' + ext))
+}
 
 export default {
   name: 'marktext',
@@ -105,6 +114,10 @@ export default {
     zoom: function (zoom) {
       ipcRenderer.emit('mt::window-zoom', null, zoom)
     }
+  },
+  beforeDestroy () {
+    window.removeEventListener('dragover', this.handleDragOver, false)
+    window.removeEventListener('drop', this.handleDrop, false)
   },
   created () {
     const { commit, dispatch } = this.$store
@@ -163,7 +176,7 @@ export default {
     dispatch('LISTEN_FOR_NOTIFICATION')
 
     // prevent Chromium's default behavior and open dropped files
-    window.addEventListener('dragover', e => {
+    this.handleDragOver = e => {
       // Cancel to allow tab drag&drop.
       if (!e.dataTransfer.types.length) return
 
@@ -180,31 +193,52 @@ export default {
         e.stopPropagation()
         e.dataTransfer.dropEffect = 'none'
       }
-    }, false)
+    }
+    window.addEventListener('dragover', this.handleDragOver, false)
 
     // Open dropped non-image files after confirmation; images are inserted by muya.
-    window.addEventListener('drop', e => {
+    this.handleDrop = e => {
       if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return
       const files = Array.from(e.dataTransfer.files)
       const images = files.filter(f => /image/.test(f.type))
       const filesToOpen = files.filter(f => !/image/.test(f.type))
       if (!filesToOpen.length) return
       e.preventDefault()
-      const paths = filesToOpen.map(f => f.path)
-      let message = paths.length === 1
-        ? `是否打开文件 "${paths[0]}"？`
-        : `是否打开选中的 ${paths.length} 个文件？`
-      if (images.length > 0) {
-        message += `（${images.length} 张图片将被忽略，如需插入图片请单独拖入）`
+      const supported = filesToOpen.filter(f => isSupportedFile(f.path))
+      const unsupported = filesToOpen.filter(f => !isSupportedFile(f.path))
+      const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+      const lines = []
+      if (unsupported.length) {
+        lines.push(`不支持的文件格式：${esc(unsupported.map(f => f.name).join('、'))}`)
       }
-      MessageBox.confirm(message, '打开文件', {
+      if (supported.length) {
+        if (supported.length === 1) {
+          lines.push(`是否打开文件 "${esc(supported[0].path)}？"`)
+        } else {
+          lines.push(`是否打开选中的 ${supported.length} 个文件？`)
+        }
+      }
+      if (images.length > 0) {
+        lines.push(`${images.length} 张图片将被忽略，如需插入图片请单独拖入`)
+      }
+      if (!supported.length) {
+        MessageBox.alert(lines.join('<br>'), '无法打开文件', {
+          confirmButtonText: '确定',
+          type: 'warning',
+          dangerouslyUseHTMLString: true
+        })
+        return
+      }
+      MessageBox.confirm(lines.join('<br>'), '打开文件', {
         confirmButtonText: '打开',
         cancelButtonText: '取消',
-        type: 'info'
+        type: unsupported.length ? 'warning' : 'info',
+        dangerouslyUseHTMLString: true
       }).then(() => {
-        ipcRenderer.send('mt::window::drop', paths)
+        ipcRenderer.send('mt::window::drop', supported.map(f => f.path))
       }).catch(() => {})
-    }, false)
+    }
+    window.addEventListener('drop', this.handleDrop, false)
 
     this.$nextTick(() => {
       const style = global.marktext.initialState || DEFAULT_STYLE

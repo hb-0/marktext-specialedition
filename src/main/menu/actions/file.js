@@ -339,6 +339,15 @@ ipcMain.on('mt::window::drop', async (e, fileList) => {
       }
       break
     }
+
+    // Unsupported file format
+    win.webContents.send('mt::show-notification', {
+      title: '无法打开文件',
+      type: 'warning',
+      message: `不支持的文件格式：${path.basename(file)}`,
+      time: 10000
+    })
+    break
   }
 })
 
