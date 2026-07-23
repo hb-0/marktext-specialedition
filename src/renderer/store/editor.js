@@ -896,7 +896,7 @@ const actions = {
 
   // Content change from realtime preview editor and source code editor
   // WORKAROUND: id is "muya" if changes come from muya and not source code editor! So we don't have to apply the workaround.
-  LISTEN_FOR_CONTENT_CHANGE ({ commit, dispatch, state, rootState }, { id, markdown, wordCount, cursor, history, toc }) {
+  LISTEN_FOR_CONTENT_CHANGE ({ commit, dispatch, state, rootState }, { id, markdown, wordCount, cursor, history, toc, programmatic }) {
     const { autoSave } = rootState.preferences
     const {
       id: currentId,
@@ -958,7 +958,7 @@ const actions = {
     }
 
     // Change save status/save to file only when the markdown changed!
-    if (markdown !== oldMarkdown) {
+    if (markdown !== oldMarkdown && !programmatic) {
       commit('SET_SAVE_STATUS', false)
 
       // Save file is auto save is enable and file exist on disk.

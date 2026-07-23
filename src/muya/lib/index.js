@@ -102,7 +102,7 @@ class Muya {
     observer.observe(container, config)
   }
 
-  dispatchChange = () => {
+  dispatchChange = (programmatic = false) => {
     const { eventCenter } = this
     const markdown = this.markdown = this.getMarkdown()
     const wordCount = this.getWordCount(markdown)
@@ -110,7 +110,7 @@ class Muya {
     const history = this.getHistory()
     const toc = this.getTOC()
 
-    eventCenter.dispatch('change', { markdown, wordCount, cursor, history, toc })
+    eventCenter.dispatch('change', { markdown, wordCount, cursor, history, toc, programmatic })
   }
 
   dispatchSelectionChange = () => {
@@ -177,7 +177,7 @@ class Muya {
     this.contentState.importCursor(cursor && isValid)
     this.contentState.render(isRenderCursor)
     setTimeout(() => {
-      this.dispatchChange()
+      this.dispatchChange(true)
     }, 0)
   }
 
