@@ -89,13 +89,10 @@
       <template #children>
         <section class="startup-action-ctrl">
           <el-radio-group v-model="startUpAction">
-            <!--
-              Hide "lastState" for now (#2064).
-            <el-radio class="ag-underdevelop" label="lastState">Restore last editor session</el-radio>
-            -->
-            <el-radio label="folder" style="margin-bottom: 10px;">Open the default directory<span>: {{defaultDirectoryToOpen}}</span></el-radio>
-            <el-button size="small" @click="selectDefaultDirectoryToOpen">Select Folder</el-button>
-            <el-radio label="blank">Open a blank page</el-radio>
+            <el-radio label="lastState" style="margin-bottom: 10px;">恢复上次关闭时的状态</el-radio>
+            <el-radio label="folder" style="margin-bottom: 10px;">打开指定目录<span>: {{defaultDirectoryToOpen}}</span></el-radio>
+            <el-button size="small" @click="selectDefaultDirectoryToOpen">选择目录</el-button>
+            <el-radio label="blank">打开空白页面</el-radio>
           </el-radio-group>
         </section>
       </template>
