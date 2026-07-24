@@ -312,11 +312,10 @@ class App {
       { activeTabId }
     )
 
+    // Clear restore files best-effort (do not clear editorSession metadata
+    // to avoid race condition with new session writes during startup)
     clearSession(paths.userDataPath, sessionMeta).catch(err => {
       log.error('Failed to clear restore files:', err)
-    })
-    dataCenter.setItem('editorSession', {}).catch(err => {
-      log.error('Failed to clear editor session metadata:', err)
     })
   }
 
