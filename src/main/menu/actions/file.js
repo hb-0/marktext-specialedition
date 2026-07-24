@@ -228,9 +228,11 @@ ipcMain.on('mt::save-and-close-tabs', async (e, unsavedFiles) => {
 
   const { needSave } = userResult
   if (needSave) {
-    Promise.all(unsavedFiles.map(file => handleResponseForSave(e, file)))
-      .then(arr => {
-        const tabIds = arr.filter(id => id != null)
+    Promise.allSettled(unsavedFiles.map(file => handleResponseForSave(e, file)))
+      .then(results => {
+        const tabIds = results
+          .filter(r => r.status === 'fulfilled' && r.value != null)
+          .map(r => r.value)
         win.webContents.send('mt::force-close-tabs-by-id', tabIds)
       })
       .catch(err => {
