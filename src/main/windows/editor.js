@@ -112,9 +112,13 @@ class EditorWindow extends BaseWindow {
       const lineEnding = preferences.getPreferredEol()
       appMenu.updateLineEndingMenu(this.id, lineEnding)
 
+      const markdownList = this._sessionTabsToOpen.concat(
+        this._markdownToOpen.map(md => ({ markdown: md }))
+      )
+
       win.webContents.send('mt::bootstrap-editor', {
         addBlankTab,
-        markdownList: this._sessionTabsToOpen,
+        markdownList,
         activeTabId: this._activeTabId,
         lineEnding,
         sideBarVisibility,
@@ -123,7 +127,9 @@ class EditorWindow extends BaseWindow {
       })
 
       this._doOpenFilesToOpen()
+      this._sessionTabsToOpen.length = 0
       this._markdownToOpen.length = 0
+      this._activeTabId = null
 
       // Listen on default system mouse zoom event (e.g. Ctrl+MouseWheel on Linux/Windows).
       win.webContents.on('zoom-changed', (event, zoomDirection) => {
@@ -414,6 +420,8 @@ class EditorWindow extends BaseWindow {
     this._directoryToOpen = ''
     this._filesToOpen = []
     this._markdownToOpen = []
+    this._sessionTabsToOpen = []
+    this._activeTabId = null
     this._openedRootDirectory = ''
     this._openedFiles = []
 
@@ -444,6 +452,8 @@ class EditorWindow extends BaseWindow {
     this._directoryToOpen = null
     this._filesToOpen = null
     this._markdownToOpen = null
+    this._sessionTabsToOpen = null
+    this._activeTabId = null
     this._openedRootDirectory = null
     this._openedFiles = null
   }

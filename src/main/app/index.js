@@ -490,7 +490,7 @@ class App {
     ipcMain.on('app-open-markdown-by-id', (windowId, data) => {
       const openFilesInNewWindow = this._accessor.preferences.getItem('openFilesInNewWindow')
       if (openFilesInNewWindow) {
-        this._createEditorWindow(null, [], [data])
+        this._createEditorWindow(null, [], [{ markdown: data }])
       } else {
         const editor = this._windowManager.get(windowId)
         if (editor) {
