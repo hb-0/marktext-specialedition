@@ -16,6 +16,42 @@ import {
 
 const autoSaveTimers = new Map()
 
+const buildSessionFromState = (state, rootState) => {
+  const activeTabId = state.currentFile ? state.currentFile.id : null
+  const openedRootDirectory = rootState.project && rootState.project.projectTree
+    ? rootState.project.projectTree.pathname
+    : ''
+
+  return {
+    openedRootDirectory,
+    activeTabId,
+    tabs: state.tabs.map(file => {
+      const isUntitled = !file.pathname
+      const isModified = !file.isSaved
+      const sessionTab = {
+        id: file.id,
+        pathname: file.pathname || '',
+        filename: file.filename,
+        isUntitled,
+        isModified,
+        options: {
+          encoding: file.encoding,
+          lineEnding: file.lineEnding,
+          adjustLineEndingOnSave: file.adjustLineEndingOnSave,
+          trimTrailingNewline: file.trimTrailingNewline
+        },
+        cursor: file.cursor,
+        history: file.history,
+        markdown: file.markdown
+      }
+      if (isUntitled || isModified) {
+        sessionTab.restoreFileName = `restore-${file.id}-${Date.now()}.md`
+      }
+      return sessionTab
+    })
+  }
+}
+
 const state = {
   currentFile: {},
   tabs: [],
@@ -499,8 +535,9 @@ const actions = {
     })
   },
 
-  LISTEN_FOR_CLOSE ({ state }) {
+  LISTEN_FOR_CLOSE ({ state, rootState }) {
     ipcRenderer.on('mt::ask-for-close', e => {
+      const session = buildSessionFromState(state, rootState)
       const unsavedFiles = state.tabs
         .filter(file => !file.isSaved)
         .map(file => {
@@ -510,9 +547,9 @@ const actions = {
         })
 
       if (unsavedFiles.length) {
-        ipcRenderer.send('mt::close-window-confirm', unsavedFiles)
+        ipcRenderer.send('mt::close-window-confirm', { unsavedFiles, session })
       } else {
-        ipcRenderer.send('mt::close-window')
+        ipcRenderer.send('mt::close-window', session)
       }
     })
   },
@@ -633,6 +670,7 @@ const actions = {
       const {
         addBlankTab,
         markdownList,
+        activeTabId,
         lineEnding,
         sideBarVisibility,
         tabBarVisibility,
@@ -655,12 +693,19 @@ const actions = {
 
       if (addBlankTab) {
         dispatch('NEW_UNTITLED_TAB', {})
-      } else if (markdownList.length) {
-        let isFirst = true
-        for (const markdown of markdownList) {
-          isFirst = false
-          dispatch('NEW_UNTITLED_TAB', { markdown, selected: isFirst })
+      } else if (markdownList && markdownList.length) {
+        for (const tab of markdownList) {
+          if (typeof tab === 'string') {
+            // Backward compatibility: plain markdown string
+            dispatch('RESTORE_UNTITLED_TAB', { tab: { markdown: tab }, selected: false })
+          } else {
+            dispatch('RESTORE_UNTITLED_TAB', { tab, selected: false })
+          }
         }
+      }
+
+      if (activeTabId) {
+        dispatch('SWITCH_TAB_BY_ID', activeTabId)
       }
     })
   },
@@ -797,6 +842,17 @@ const actions = {
     dispatch('UPDATE_LINE_ENDING_MENU')
   },
 
+  SWITCH_TAB_BY_ID ({ commit, dispatch, state }, tabId) {
+    const { tabs } = state
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab) {
+      console.warn('Cannot find tab by id:', tabId)
+      return
+    }
+    commit('SET_CURRENT_FILE', tab)
+    dispatch('UPDATE_LINE_ENDING_MENU')
+  },
+
   /**
    * Create a new untitled tab optional from a markdown string.
    *
@@ -820,6 +876,38 @@ const actions = {
       const { id, markdown } = fileState
       dispatch('UPDATE_CURRENT_FILE', fileState)
       bus.$emit('file-loaded', { id, markdown })
+    } else {
+      commit('ADD_FILE_TO_TABS', fileState)
+    }
+  },
+
+  RESTORE_UNTITLED_TAB ({ commit, state, dispatch, rootState }, { tab, selected }) {
+    if (selected == null) {
+      selected = false
+    }
+
+    dispatch('SHOW_TAB_VIEW', false)
+
+    const { defaultEncoding, endOfLine } = rootState.preferences
+    const { tabs } = state
+    const baseState = getBlankFileState(tabs, defaultEncoding, endOfLine, tab.markdown || '')
+
+    const fileState = Object.assign(baseState, {
+      filename: tab.filename,
+      isSaved: !tab.isModified,
+      pathname: tab.pathname,
+      cursor: tab.cursor,
+      history: tab.history
+    })
+
+    // Preserve the original id if provided (for session restore)
+    if (tab.id) {
+      fileState.id = tab.id
+    }
+
+    if (selected) {
+      dispatch('UPDATE_CURRENT_FILE', fileState)
+      bus.$emit('file-loaded', { id: fileState.id, markdown: tab.markdown })
     } else {
       commit('ADD_FILE_TO_TABS', fileState)
     }
