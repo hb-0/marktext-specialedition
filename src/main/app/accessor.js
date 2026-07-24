@@ -24,7 +24,7 @@ class Accessor {
 
     this.keybindings = new Keybindings(this.commandManager, appEnvironment)
     this.menu = new AppMenu(this.preferences, this.keybindings, userDataPath)
-    this.windowManager = new WindowManager(this.menu, this.preferences)
+    this.windowManager = new WindowManager(this)
   }
 
   _loadCommands () {

@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import EventEmitter from 'events'
 import log from 'electron-log'
 import Watcher, { WATCHER_STABILITY_THRESHOLD, WATCHER_STABILITY_POLL_INTERVAL } from '../filesystem/watcher'
 import { WindowType } from '../windows/base'
+import { saveSession } from '../utils/session'
+import { showUnsavedFilesMessage, handleResponseForSave } from '../menu/actions/file'
 
 class WindowActivityList {
   constructor () {
@@ -53,20 +55,20 @@ class WindowActivityList {
 class WindowManager extends EventEmitter {
   /**
    *
-   * @param {AppMenu} appMenu The application menu instance.
-   * @param {Preference} preferences The preference instance.
+   * @param {Accessor} accessor The application accessor.
    */
-  constructor (appMenu, preferences) {
+  constructor (accessor) {
     super()
 
-    this._appMenu = appMenu
+    this._accessor = accessor
+    this._appMenu = accessor.menu
 
     this._activeWindowId = null
     this._windows = new Map()
     this._windowActivity = new WindowActivityList()
 
     // TODO(need::refactor): Please see #1035.
-    this._watcher = new Watcher(preferences)
+    this._watcher = new Watcher(accessor.preferences)
 
     this._listenForIpcMain()
   }
@@ -353,9 +355,73 @@ class WindowManager extends EventEmitter {
     })
 
     // Force close a BrowserWindow
-    ipcMain.on('mt::close-window', e => {
+    ipcMain.on('mt::close-window', async (e, session) => {
       const win = BrowserWindow.fromWebContents(e.sender)
+      if (session) {
+        try {
+          const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
+          await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+        } catch (err) {
+          log.error('Failed to save editor session:', err)
+        }
+      }
       this.forceClose(win)
+    })
+
+    ipcMain.on('mt::close-window-confirm', async (e, { unsavedFiles, session }) => {
+      const win = BrowserWindow.fromWebContents(e.sender)
+      const userResult = await showUnsavedFilesMessage(win, unsavedFiles)
+      if (!userResult) {
+        return
+      }
+
+      const { needSave } = userResult
+      if (needSave) {
+        try {
+          await Promise.all(unsavedFiles.map(file => handleResponseForSave(e, file)))
+          if (session) {
+            const savedIds = new Set(unsavedFiles.map(f => f.id))
+            for (const tab of session.tabs) {
+              if (savedIds.has(tab.id)) {
+                tab.isModified = false
+                delete tab.markdown
+              }
+            }
+            const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
+            await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+          }
+          ipcMain.emit('window-close-by-id', win.id)
+        } catch (err) {
+          log.error('Error while saving before quit:', err)
+          const { response } = await dialog.showMessageBox(win, {
+            type: 'error',
+            buttons: ['Close', 'Keep It Open'],
+            message: 'Failure while saving files',
+            detail: err.message
+          })
+          if (win.id && response === 0) {
+            if (session) {
+              try {
+                const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
+                await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+              } catch (saveErr) {
+                log.error('Failed to save session after save error:', saveErr)
+              }
+            }
+            ipcMain.emit('window-close-by-id', win.id)
+          }
+        }
+      } else {
+        if (session) {
+          try {
+            const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
+            await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+          } catch (err) {
+            log.error('Failed to save editor session:', err)
+          }
+        }
+        ipcMain.emit('window-close-by-id', win.id)
+      }
     })
 
     ipcMain.on('mt::open-file', (e, filePath, options) => {

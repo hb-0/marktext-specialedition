@@ -106,7 +106,7 @@ const handleResponseForPrint = e => {
   })
 }
 
-const handleResponseForSave = async (e, { id, filename, markdown, pathname, options, defaultPath }) => {
+export const handleResponseForSave = async (e, { id, filename, markdown, pathname, options, defaultPath }) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   let recommendFilename = getRecommendTitleFromMarkdownString(markdown)
   if (!recommendFilename) {
@@ -162,7 +162,7 @@ const handleResponseForSave = async (e, { id, filename, markdown, pathname, opti
     })
 }
 
-const showUnsavedFilesMessage = async (win, files) => {
+export const showUnsavedFilesMessage = async (win, files) => {
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning',
     buttons: ['Save', 'Cancel', 'Don\'t save'],
@@ -285,40 +285,6 @@ ipcMain.on('mt::response-file-save-as', async (e, { id, filename, markdown, path
         log.error('Error while save as:', err)
         win.webContents.send('mt::tab-save-failure', id, err.message)
       })
-  }
-})
-
-ipcMain.on('mt::close-window-confirm', async (e, unsavedFiles) => {
-  const win = BrowserWindow.fromWebContents(e.sender)
-  const userResult = await showUnsavedFilesMessage(win, unsavedFiles)
-  if (!userResult) {
-    return
-  }
-
-  const { needSave } = userResult
-  if (needSave) {
-    Promise.all(unsavedFiles.map(file => handleResponseForSave(e, file)))
-      .then(() => {
-        ipcMain.emit('window-close-by-id', win.id)
-      })
-      .catch(err => {
-        log.error('Error while saving before quit:', err)
-
-        // Notify user about the problem.
-        dialog.showMessageBox(win, {
-          type: 'error',
-          buttons: ['Close', 'Keep It Open'],
-          message: 'Failure while saving files',
-          detail: err.message
-        })
-          .then(({ response }) => {
-            if (win.id && response === 0) {
-              ipcMain.emit('window-close-by-id', win.id)
-            }
-          })
-      })
-  } else {
-    ipcMain.emit('window-close-by-id', win.id)
   }
 })
 
