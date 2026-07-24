@@ -14,6 +14,7 @@ import { selectTheme } from '../menu/actions/theme'
 import { dockMenu } from '../menu/templates'
 import registerSpellcheckerListeners from '../spellchecker'
 import { watchers } from '../utils/imagePathAutoComplement'
+import { loadSession } from '../utils/session'
 import { WindowType } from '../windows/base'
 import EditorWindow from '../windows/editor'
 import SettingWindow from '../windows/setting'
@@ -120,7 +121,7 @@ class App {
     return path.join(screenshotFolderPath, fileName)
   }
 
-  ready = () => {
+  ready = async () => {
     const { _args: args, _openFilesCache } = this
     const { preferences } = this._accessor
 
@@ -197,6 +198,8 @@ class App {
 
     if (_openFilesCache.length) {
       this._openFilesToOpen()
+    } else if (startUpAction === 'lastState') {
+      await this._restoreLastEditorSession()
     } else {
       this._createEditorWindow()
     }
@@ -244,6 +247,64 @@ class App {
   }
 
   // --- private --------------------------------
+
+  async _restoreLastEditorSession () {
+    const { dataCenter, paths } = this._accessor
+    let sessionMeta = null
+    try {
+      sessionMeta = await dataCenter.getItem('editorSession')
+    } catch (err) {
+      log.error('Failed to load editor session metadata:', err)
+      this._createEditorWindow()
+      return
+    }
+
+    if (!sessionMeta || !sessionMeta.tabs || sessionMeta.tabs.length === 0) {
+      this._createEditorWindow()
+      return
+    }
+
+    let session
+    try {
+      session = await loadSession(paths.userDataPath, sessionMeta)
+    } catch (err) {
+      log.error('Failed to load editor session:', err)
+      this._createEditorWindow()
+      return
+    }
+
+    // Filter out missing tabs if all restore files are missing
+    const validTabs = session.tabs.filter(tab => {
+      if (tab.isMissing && (tab.isUntitled || tab.isModified)) {
+        log.warn(`Restore file missing for tab ${tab.id} (${tab.filename})`)
+        return false
+      }
+      return true
+    })
+
+    if (validTabs.length === 0) {
+      log.warn('No valid tabs to restore')
+      this._createEditorWindow()
+      return
+    }
+
+    const fileList = []
+    const sessionTabs = []
+    for (const tab of validTabs) {
+      if (tab.isUntitled || tab.isModified || tab.isMissing) {
+        sessionTabs.push(tab)
+      } else {
+        fileList.push(tab.pathname)
+      }
+    }
+
+    this._createEditorWindow(
+      session.openedRootDirectory,
+      fileList,
+      sessionTabs,
+      { activeTabId: session.activeTabId }
+    )
+  }
 
   /**
    * Creates a new editor window.
