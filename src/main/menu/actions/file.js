@@ -138,6 +138,11 @@ const handleResponseForSave = async (e, { id, filename, markdown, pathname, opti
   filePath = path.resolve(filePath)
   const extension = path.extname(filePath) || '.md'
   filePath = !filePath.endsWith(extension) ? filePath += extension : filePath
+
+  // Set ignore marker BEFORE writing so that the watcher's change event
+  // (fired ~1s later via awaitWriteFinish) is reliably suppressed on all platforms.
+  ipcMain.emit('window-file-saved', win.id, filePath)
+
   return writeMarkdownFile(filePath, markdown, options, win)
     .then(() => {
       if (!alreadyExistOnDisk) {
@@ -147,7 +152,6 @@ const handleResponseForSave = async (e, { id, filename, markdown, pathname, opti
         const filename = path.basename(filePath)
         win.webContents.send('mt::set-pathname', { id, pathname: filePath, filename })
       } else {
-        ipcMain.emit('window-file-saved', win.id, filePath)
         win.webContents.send('mt::tab-saved', id)
       }
       return id
@@ -255,6 +259,10 @@ ipcMain.on('mt::response-file-save-as', async (e, { id, filename, markdown, path
 
   if (filePath && !canceled) {
     filePath = path.resolve(filePath)
+
+    // Set ignore marker BEFORE writing so that the watcher change event is suppressed.
+    ipcMain.emit('window-file-saved', win.id, filePath)
+
     writeMarkdownFile(filePath, markdown, options, win)
       .then(() => {
         if (!alreadyExistOnDisk) {
@@ -270,7 +278,6 @@ ipcMain.on('mt::response-file-save-as', async (e, { id, filename, markdown, path
           const filename = path.basename(filePath)
           win.webContents.send('mt::set-pathname', { id, pathname: filePath, filename })
         } else {
-          ipcMain.emit('window-file-saved', win.id, filePath)
           win.webContents.send('mt::tab-saved', id)
         }
       })

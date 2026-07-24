@@ -3,7 +3,7 @@ import fsPromises from 'fs/promises'
 import log from 'electron-log'
 import chokidar from 'chokidar'
 import { exists } from 'common/filesystem'
-import { hasMarkdownExtension } from 'common/filesystem/paths'
+import { hasMarkdownExtension, isSamePathSync } from 'common/filesystem/paths'
 import { getUniqueId } from '../utils'
 import { loadMarkdownFile } from '../filesystem/markdown'
 import { isLinux, isOsx } from '../config'
@@ -323,7 +323,7 @@ class Watcher {
    * @param {string} pathname The path to ignore.
    * @param {number} [duration] The duration in ms to ignore the changed event.
    */
-  ignoreChangedEvent (windowId, pathname, duration = WATCHER_STABILITY_THRESHOLD + (WATCHER_STABILITY_POLL_INTERVAL * 2)) {
+  ignoreChangedEvent (windowId, pathname, duration = WATCHER_STABILITY_THRESHOLD + (WATCHER_STABILITY_POLL_INTERVAL * 4)) {
     this._ignoreChangeEvents.push({ windowId, pathname, duration, start: new Date() })
   }
 
@@ -341,28 +341,29 @@ class Watcher {
       const currentTime = new Date()
       for (let i = 0; i < _ignoreChangeEvents.length; ++i) {
         const { windowId, pathname: pathToIgnore, start, duration } = _ignoreChangeEvents[i]
-        if (windowId === winId && pathToIgnore === pathname) {
+        if (windowId === winId && isSamePathSync(pathToIgnore, pathname)) {
           _ignoreChangeEvents.splice(i, 1)
           --i
 
           // Modification origin is the editor and we should ignore the event.
           if (currentTime - start < duration) {
+            if (global.MARKTEXT_DEBUG_VERBOSE >= 3) {
+              console.log(`Ignoring file event: current="${currentTime}", start="${start}", duration=${duration}.`)
+            }
             return true
           }
 
           // Try to catch cloud drives that emit the change event not immediately or re-sync the change (GH#3044).
-          if (!usePolling) {
-            try {
-              const fileInfo = await fsPromises.stat(pathname)
-              if (fileInfo.mtime - start < duration) {
-                if (global.MARKTEXT_DEBUG_VERBOSE >= 3) {
-                  console.log(`Ignoring file event after "stat": current="${currentTime}", start="${start}", file="${fileInfo.mtime}".`)
-                }
-                return true
+          try {
+            const fileInfo = await fsPromises.stat(pathname)
+            if (fileInfo.mtime - start < duration) {
+              if (global.MARKTEXT_DEBUG_VERBOSE >= 3) {
+                console.log(`Ignoring file event after "stat": current="${currentTime}", start="${start}", file="${fileInfo.mtime}".`)
               }
-            } catch (error) {
-              console.error('Failed to "stat" file to determine modification time:', error)
+              return true
             }
+          } catch (error) {
+            console.error('Failed to "stat" file to determine modification time:', error)
           }
         }
       }

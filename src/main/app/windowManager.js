@@ -420,7 +420,8 @@ class WindowManager extends EventEmitter {
 
     ipcMain.on('window-file-saved', (windowId, pathname) => {
       // A changed event is emitted earliest after the stability threshold.
-      const duration = WATCHER_STABILITY_THRESHOLD + (WATCHER_STABILITY_POLL_INTERVAL * 2)
+      // Use a larger window to cover write time + awaitWriteFinish + latency.
+      const duration = WATCHER_STABILITY_THRESHOLD + (WATCHER_STABILITY_POLL_INTERVAL * 4)
       this._watcher.ignoreChangedEvent(windowId, pathname, duration)
     })
 
