@@ -61,7 +61,7 @@
       "lastState",
       "blank"
     ],
-    "default": "blank"
+    "default": "lastState"
   },
   "defaultDirectoryToOpen": {
     "description": "General--The default directory that should be opened on startup when startUp=folder.",
