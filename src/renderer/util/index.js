@@ -22,6 +22,17 @@ export const delay = time => {
 const ID_PREFEX = 'mt-'
 let id = 0
 
+export const getUniqueId = () => {
+  return `${ID_PREFEX}${id++}`
+}
+
+export const advanceUniqueId = (usedId) => {
+  const num = parseInt(usedId.replace(ID_PREFEX, ''), 10)
+  if (!isNaN(num) && num >= id) {
+    id = num + 1
+  }
+}
+
 export const serialize = function (params) {
   return Object.keys(params).map(key => `${key}=${encodeURI(params[key])}`).join('&')
 }
@@ -116,10 +127,6 @@ export const animatedScrollTo = function (element, to, duration, callback) {
   }
 
   requestAnimationFrame(animateScroll)
-}
-
-export const getUniqueId = () => {
-  return `${ID_PREFEX}${id++}`
 }
 
 export const hasKeys = obj => Object.keys(obj).length > 0

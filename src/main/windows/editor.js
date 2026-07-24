@@ -112,6 +112,9 @@ class EditorWindow extends BaseWindow {
       const lineEnding = preferences.getPreferredEol()
       appMenu.updateLineEndingMenu(this.id, lineEnding)
 
+      // Process files from fileList BEFORE session tabs to preserve original tab order
+      this._doOpenFilesToOpen()
+
       const markdownList = this._sessionTabsToOpen.concat(
         this._markdownToOpen.map(md => ({ markdown: md }))
       )
@@ -126,7 +129,6 @@ class EditorWindow extends BaseWindow {
         sourceCodeModeEnabled
       })
 
-      this._doOpenFilesToOpen()
       this._sessionTabsToOpen.length = 0
       this._markdownToOpen.length = 0
       this._activeTabId = null
@@ -210,6 +212,12 @@ class EditorWindow extends BaseWindow {
       win = null
     })
 
+    // Start loading files from fileList before loadURL so they're ready
+    // in _filesToOpen when did-finish-load fires.
+    if (fileList.length) {
+      this.openTabsFromPaths(fileList)
+    }
+
     this.lifecycle = WindowLifecycle.LOADING
     win.loadURL(this._buildUrlString(this.id, env, preferences))
     win.setSheetOffset(TITLE_BAR_HEIGHT)
@@ -219,13 +227,10 @@ class EditorWindow extends BaseWindow {
     // Disable application menu shortcuts because we want to handle key bindings ourself.
     win.webContents.setIgnoreMenuShortcuts(true)
 
-    // Delay load files and directories after the current control flow.
+    // Delay open directory after the current control flow.
     setTimeout(() => {
       if (rootDirectory) {
         this.openFolder(rootDirectory)
-      }
-      if (fileList.length) {
-        this.openTabsFromPaths(fileList)
       }
     }, 0)
 

@@ -3,7 +3,7 @@ import path from 'path'
 import equal from 'deep-equal'
 import { isSamePathSync } from 'common/filesystem/paths'
 import bus from '../bus'
-import { hasKeys, getUniqueId } from '../util'
+import { hasKeys, getUniqueId, advanceUniqueId } from '../util'
 import listToTree from '../util/listToTree'
 import { createDocumentState, getOptionsFromState, getSingleFileState, getBlankFileState } from './help'
 import notice from '../services/notification'
@@ -694,9 +694,9 @@ const actions = {
       if (addBlankTab) {
         dispatch('NEW_UNTITLED_TAB', {})
       } else if (markdownList && markdownList.length) {
+        console.log('[Session Restore] Bootstrap markdownList count:', markdownList.length, 'activeTabId:', activeTabId)
         for (const tab of markdownList) {
           if (typeof tab === 'string') {
-            // Backward compatibility: plain markdown string
             dispatch('RESTORE_UNTITLED_TAB', { tab: { markdown: tab }, selected: false })
           } else {
             dispatch('RESTORE_UNTITLED_TAB', { tab, selected: false })
@@ -850,6 +850,9 @@ const actions = {
       return
     }
     commit('SET_CURRENT_FILE', tab)
+    if (typeof tab.markdown === 'string') {
+      bus.$emit('file-loaded', { id: tab.id, markdown: tab.markdown, cursor: tab.cursor, history: tab.history })
+    }
     dispatch('UPDATE_LINE_ENDING_MENU')
   },
 
@@ -904,6 +907,8 @@ const actions = {
     // Preserve the original id if provided (for session restore)
     if (tab.id) {
       fileState.id = tab.id
+      // Advance the unique id counter to prevent collisions with restored tab ids
+      advanceUniqueId(tab.id)
     }
 
     if (selected) {
@@ -1006,6 +1011,11 @@ const actions = {
       // Update old tab or discard changes
       for (const tab of state.tabs) {
         if (tab.id && tab.id === id) {
+          // Don't overwrite non-empty content with empty content
+          // that Muya emits during tab switch (Muya clears its buffer).
+          if (markdown.trim() === '' && tab.markdown && tab.markdown.trim() !== '') {
+            return
+          }
           tab.markdown = adjustTrailingNewlines(markdown, tab.trimTrailingNewline)
           // Set cursor
           if (cursor) {
