@@ -107,9 +107,6 @@ linux:
   mimeTypes:
   - "text/markdown"
   icon: "resources/icons"
-  desktop:
-    StartupWMClass: "marktext"
-    Keywords: "marktext;"
   target:
   - target: "AppImage"
   - target: "deb"
