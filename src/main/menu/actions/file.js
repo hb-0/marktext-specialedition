@@ -159,6 +159,7 @@ export const handleResponseForSave = async (e, { id, filename, markdown, pathnam
     .catch(err => {
       log.error('Error while saving:', err)
       win.webContents.send('mt::tab-save-failure', id, err.message)
+      throw err
     })
 }
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import EventEmitter from 'events'
 import log from 'electron-log'
 import Watcher, { WATCHER_STABILITY_THRESHOLD, WATCHER_STABILITY_POLL_INTERVAL } from '../filesystem/watcher'
@@ -343,6 +343,11 @@ class WindowManager extends EventEmitter {
   // --- private --------------------------------
 
   _listenForIpcMain () {
+    const persistEditorSession = async (accessor, session) => {
+      const sessionToStore = await saveSession(session, accessor.paths.userDataPath)
+      await accessor.dataCenter.setItem('editorSession', sessionToStore)
+    }
+
     // HACK: Don't use this event! Please see #1034 and #1035
     ipcMain.on('mt::window-add-file-path', (e, filePath) => {
       const win = BrowserWindow.fromWebContents(e.sender)
@@ -359,8 +364,7 @@ class WindowManager extends EventEmitter {
       const win = BrowserWindow.fromWebContents(e.sender)
       if (session) {
         try {
-          const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
-          await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+          await persistEditorSession(this._accessor, session)
         } catch (err) {
           log.error('Failed to save editor session:', err)
         }
@@ -377,45 +381,41 @@ class WindowManager extends EventEmitter {
 
       const { needSave } = userResult
       if (needSave) {
-        try {
-          await Promise.all(unsavedFiles.map(file => handleResponseForSave(e, file)))
-          if (session) {
-            const savedIds = new Set(unsavedFiles.map(f => f.id))
-            for (const tab of session.tabs) {
-              if (savedIds.has(tab.id)) {
-                tab.isModified = false
-                delete tab.markdown
-              }
+        const saveResults = await Promise.allSettled(unsavedFiles.map(file => handleResponseForSave(e, file)))
+        const successfullySavedIds = new Set(
+          saveResults
+            .filter(r => r.status === 'fulfilled' && r.value != null)
+            .map(r => r.value)
+        )
+
+        let hasSaveFailures = false
+        if (session) {
+          for (const tab of session.tabs) {
+            if (successfullySavedIds.has(tab.id)) {
+              tab.isModified = false
+              delete tab.markdown
+            } else if (unsavedFiles.some(f => f.id === tab.id)) {
+              hasSaveFailures = true
+              tab.isModified = true
             }
-            const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
-            await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
           }
-          ipcMain.emit('window-close-by-id', win.id)
-        } catch (err) {
-          log.error('Error while saving before quit:', err)
-          const { response } = await dialog.showMessageBox(win, {
-            type: 'error',
-            buttons: ['Close', 'Keep It Open'],
-            message: 'Failure while saving files',
-            detail: err.message
-          })
-          if (win.id && response === 0) {
-            if (session) {
-              try {
-                const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
-                await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
-              } catch (saveErr) {
-                log.error('Failed to save session after save error:', saveErr)
-              }
-            }
-            ipcMain.emit('window-close-by-id', win.id)
+          try {
+            await persistEditorSession(this._accessor, session)
+          } catch (err) {
+            log.error('Failed to save editor session:', err)
           }
         }
+
+        if (hasSaveFailures) {
+          const failedCount = saveResults.filter(r => r.status === 'rejected').length
+          log.warn(`${failedCount} file(s) failed to save during window close`)
+        }
+
+        ipcMain.emit('window-close-by-id', win.id)
       } else {
         if (session) {
           try {
-            const sessionToStore = await saveSession(session, this._accessor.paths.userDataPath)
-            await this._accessor.dataCenter.setItem('editorSession', sessionToStore)
+            await persistEditorSession(this._accessor, session)
           } catch (err) {
             log.error('Failed to save editor session:', err)
           }
