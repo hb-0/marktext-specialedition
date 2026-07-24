@@ -1,6 +1,6 @@
+import crypto from 'crypto'
 import path from 'path'
 import fsPromises from 'fs/promises'
-import { getUniqueId } from '../../renderer/util'
 
 export const RESTORE_DIR_NAME = 'restore'
 
@@ -29,10 +29,11 @@ export const buildSession = (editorState, activeTabId, openedRootDirectory = '')
           trimTrailingNewline: tab.trimTrailingNewline
         },
         cursor: tab.cursor,
-        history: tab.history
+        history: tab.history,
+        markdown: tab.markdown
       }
       if (needsRestoreFile) {
-        sessionTab.restoreFileName = `restore-${tab.id}-${getUniqueId()}.md`
+        sessionTab.restoreFileName = `restore-${tab.id}-${crypto.randomUUID()}.md`
       }
       return sessionTab
     })
@@ -43,8 +44,14 @@ export const saveSession = async (session, userDataPath) => {
   const restoreDir = getRestoreDirectory(userDataPath)
   await fsPromises.mkdir(restoreDir, { recursive: true })
 
+  // Avoid mutating the caller's session; clone tabs and each tab object.
+  const clonedSession = {
+    ...session,
+    tabs: session.tabs.map(tab => ({ ...tab }))
+  }
+
   // Write restore files for tabs that need them.
-  for (const tab of session.tabs) {
+  for (const tab of clonedSession.tabs) {
     if (tab.restoreFileName) {
       const restorePath = path.join(restoreDir, tab.restoreFileName)
       await fsPromises.writeFile(restorePath, tab.markdown || '', 'utf8')
@@ -53,7 +60,7 @@ export const saveSession = async (session, userDataPath) => {
     }
   }
 
-  return session
+  return clonedSession
 }
 
 export const loadSession = async (userDataPath, sessionMeta) => {
