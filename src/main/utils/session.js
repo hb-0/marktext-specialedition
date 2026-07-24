@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import path from 'path'
 import fsPromises from 'fs/promises'
+import log from 'electron-log'
 
 export const RESTORE_DIR_NAME = 'restore'
 
@@ -64,6 +65,10 @@ export const saveSession = async (session, userDataPath) => {
 }
 
 export const loadSession = async (userDataPath, sessionMeta) => {
+  if (!Array.isArray(sessionMeta.tabs)) {
+    log.warn('Invalid session: tabs is not an array')
+    return { openedRootDirectory: '', activeTabId: null, tabs: [] }
+  }
   const restoreDir = getRestoreDirectory(userDataPath)
   const session = {
     openedRootDirectory: sessionMeta.openedRootDirectory || '',

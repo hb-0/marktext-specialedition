@@ -14,7 +14,7 @@ import { selectTheme } from '../menu/actions/theme'
 import { dockMenu } from '../menu/templates'
 import registerSpellcheckerListeners from '../spellchecker'
 import { watchers } from '../utils/imagePathAutoComplement'
-import { loadSession } from '../utils/session'
+import { loadSession, clearSession } from '../utils/session'
 import { WindowType } from '../windows/base'
 import EditorWindow from '../windows/editor'
 import SettingWindow from '../windows/setting'
@@ -273,16 +273,17 @@ class App {
       return
     }
 
-    // Filter out missing tabs if all restore files are missing
-    const validTabs = session.tabs.filter(tab => {
-      if (tab.isMissing && (tab.isUntitled || tab.isModified)) {
-        log.warn(`Restore file missing for tab ${tab.id} (${tab.filename})`)
-        return false
+    const validTabs = []
+    let missingCount = 0
+    for (const tab of session.tabs) {
+      if (tab.isMissing) {
+        log.warn(`Restore file missing for tab ${tab.id} (${tab.filename}), opening as empty tab`)
+        missingCount++
       }
-      return true
-    })
+      validTabs.push(tab)
+    }
 
-    if (validTabs.length === 0) {
+    if (validTabs.length === 0 || (missingCount === validTabs.length)) {
       log.warn('No valid tabs to restore')
       this._createEditorWindow()
       return
@@ -291,19 +292,32 @@ class App {
     const fileList = []
     const sessionTabs = []
     for (const tab of validTabs) {
-      if (tab.isUntitled || tab.isModified || tab.isMissing) {
+      if (tab.isUntitled || tab.isModified) {
         sessionTabs.push(tab)
       } else {
         fileList.push(tab.pathname)
       }
     }
 
+    let activeTabId = session.activeTabId
+    if (activeTabId && !validTabs.some(t => t.id === activeTabId)) {
+      log.warn(`Active tab ${activeTabId} not found in restored tabs, falling back to first tab`)
+      activeTabId = validTabs[0] ? validTabs[0].id : null
+    }
+
     this._createEditorWindow(
-      session.openedRootDirectory,
+      session.openedRootDirectory || null,
       fileList,
       sessionTabs,
-      { activeTabId: session.activeTabId }
+      { activeTabId }
     )
+
+    clearSession(paths.userDataPath, sessionMeta).catch(err => {
+      log.error('Failed to clear restore files:', err)
+    })
+    dataCenter.setItem('editorSession', {}).catch(err => {
+      log.error('Failed to clear editor session metadata:', err)
+    })
   }
 
   /**
