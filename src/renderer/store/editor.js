@@ -844,7 +844,7 @@ const actions = {
 
   SWITCH_TAB_BY_ID ({ commit, dispatch, state }, tabId) {
     const { tabs } = state
-    const tab = tabs.find(t => t.id === tabId)
+    const tab = tabs.find(t => t.id === tabId) || (tabs.length > 0 ? tabs[0] : null)
     if (!tab) {
       console.warn('Cannot find tab by id:', tabId)
       return
@@ -896,6 +896,7 @@ const actions = {
       filename: tab.filename,
       isSaved: !tab.isModified,
       pathname: tab.pathname,
+      ...(tab.options || {}),
       cursor: tab.cursor,
       history: tab.history
     })
