@@ -250,13 +250,13 @@ class App {
    *
    * @param {string} [rootDirectory] The root directory to open.
    * @param {string[]} [fileList] A list of markdown files to open.
-   * @param {string[]} [markdownList] Array of markdown data to open.
+   * @param {Object[]} [sessionTabs] Array of session tab objects to restore.
    * @param {*} [options] The BrowserWindow options.
    * @returns {EditorWindow} The created editor window.
    */
-  _createEditorWindow (rootDirectory = null, fileList = [], markdownList = [], options = {}) {
+  _createEditorWindow (rootDirectory = null, fileList = [], sessionTabs = [], options = {}) {
     const editor = new EditorWindow(this._accessor)
-    editor.createWindow(rootDirectory, fileList, markdownList, options)
+    editor.createWindow(rootDirectory, fileList, sessionTabs, options)
     this._windowManager.add(editor)
     if (this._windowManager.windowCount === 1) {
       this._accessor.menu.setActiveWindow(editor.id)

@@ -23,6 +23,8 @@ class EditorWindow extends BaseWindow {
     this._directoryToOpen = null
     this._filesToOpen = [] // {doc: IMarkdownDocumentRaw, options: any, selected: boolean}
     this._markdownToOpen = [] // List of markdown strings or an empty string will open a new untitled tab
+    this._sessionTabsToOpen = [] // Array of session tab objects
+    this._activeTabId = null
 
     // Root directory and file list that are currently opened. These lists are
     // used to find the best window to open new files in.
@@ -35,12 +37,17 @@ class EditorWindow extends BaseWindow {
    *
    * @param {string} [rootDirectory] The root directory to open.
    * @param {string[]} [fileList] A list of markdown files to open.
-   * @param {string[]} [markdownList] Array of markdown data to open.
+   * @param {Object[]} [sessionTabs] Array of session tab objects to restore.
    * @param {*} [options] The BrowserWindow options.
    */
-  createWindow (rootDirectory = null, fileList = [], markdownList = [], options = {}) {
+  createWindow (rootDirectory = null, fileList = [], sessionTabs = [], options = {}) {
     const { menu: appMenu, env, preferences } = this._accessor
-    const addBlankTab = !rootDirectory && fileList.length === 0 && markdownList.length === 0
+    const addBlankTab = !rootDirectory && fileList.length === 0 && sessionTabs.length === 0
+
+    this._sessionTabsToOpen = sessionTabs
+    if (options.activeTabId != null) {
+      this._activeTabId = options.activeTabId
+    }
 
     const mainWindowState = windowStateKeeper({
       defaultWidth: 1200,
@@ -107,7 +114,8 @@ class EditorWindow extends BaseWindow {
 
       win.webContents.send('mt::bootstrap-editor', {
         addBlankTab,
-        markdownList: this._markdownToOpen,
+        markdownList: this._sessionTabsToOpen,
+        activeTabId: this._activeTabId,
         lineEnding,
         sideBarVisibility,
         tabBarVisibility,
